@@ -712,28 +712,16 @@ class DistributedDataParallel(Module):
                 "process_group argument to DDP constructor"
             )
 
-    @contextmanager
     def no_sync(self):
-        r"""
-        A context manager to disable gradient synchronizations across DDP
-        processes. Within this context, gradients will be accumulated on module
-        variables, which will later be synchronized in the first
-        forward-backward pass exiting the context.
-
-        Example::
-
-            >>> ddp = torch.nn.parallel.DistributedDataParallel(model, pg)
-            >>> with ddp.no_sync():
-            >>>   for input in inputs:
-            >>>     ddp(input).backward()  # no synchronization, accumulate grads
-            >>> ddp(another_input).backward()  # synchronize grads
-        """
-        old_require_backward_grad_sync = self.require_backward_grad_sync
-        self.require_backward_grad_sync = False
-        try:
-            yield
-        finally:
-            self.require_backward_grad_sync = old_require_backward_grad_sync
+        def no_sync_forward_wrap(*args, **kwargs):
+            old_require_backward_grad_sync = self.require_backward_grad_sync
+            self.require_backward_grad_sync = False
+            try:
+                self(*args,**kwargs)
+            finally:
+                self.require_backward_grad_sync = old_require_backward_grad_sync
+        
+        return no_sync_forward_wrap
 
     def forward(self, *inputs, **kwargs):
         with torch.autograd.profiler.record_function("DistributedDataParallel.forward"):
